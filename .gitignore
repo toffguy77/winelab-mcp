@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Тесты и инструменты
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Локальное состояние: сюда попадают куки сессии — в git не место
+session.json
+*.session.json
+.env
+
+# ОС и редакторы
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
