@@ -246,6 +246,47 @@ def current_store() -> dict:
 
 
 @mcp.tool()
+def set_store(store_code: str) -> dict:
+    """Привязать сессию к конкретному магазину ("M735") — от него зависят остатки.
+
+    Код магазина берётся из find_stores. Магазин должен быть в текущем регионе:
+    если он в другом, сначала переключите регион через set_region.
+    """
+    try:
+        card = _client.store(store_code)
+    except BlockedError:
+        return {
+            "ok": False,
+            "error_kind": "bad_input",
+            "error": f"магазин {store_code} не найден в регионе {_client.region} — "
+            "проверьте код через find_stores или смените регион через set_region",
+        }
+    except Exception as exc:  # noqa: BLE001
+        return _err(exc)
+
+    try:
+        result = _client.select_store(store_code)
+        if not result["ok"]:
+            return {
+                "ok": False,
+                "error_kind": "unsupported",
+                "error": f"сайт не дал переключиться на {store_code}: ни одна из "
+                f"{len(result['attempts'])} стратегий не прижилась",
+                "attempts": result["attempts"],
+                "current_store": _client.current_pos_name(),
+            }
+        return {
+            "ok": True,
+            "store": slim_store(card),
+            "method": result["method"],
+            "note": "остатки и цены в поиске теперь считаются по этому магазину; "
+            "магазин сохранён в сессии и переживёт перезапуск сервера",
+        }
+    except Exception as exc:  # noqa: BLE001
+        return _err(exc)
+
+
+@mcp.tool()
 def find_stores(query: str | None = None, limit: int = 10, page: int = 0) -> dict:
     """Магазины текущего региона; query — часть адреса или города ("Адмирала", "Москва")."""
     try:

@@ -50,6 +50,33 @@ def test_stores_and_current_pos(live):
     assert live.current_pos().get("favouritePosName")
 
 
+def test_select_store_sticks(live):
+    """Главное в set_store: после переключения сайт отдаёт наш магазин."""
+    stores = live.stores("Москва")
+    codes = [s.get("name") or s.get("displayName") for s in stores.get("data") or []]
+    target = next((c for c in codes if c and c != live.current_pos_name()), None)
+    if not target:
+        pytest.skip("в регионе не нашлось второго магазина")
+    result = live.select_store(target)
+    assert result["ok"], f"ни одна стратегия не сработала: {result['attempts']}"
+    assert live.current_pos_name() == target
+
+
+def test_stock_follows_selected_store(live):
+    """Смысл выбора магазина — остатки должны считаться по нему."""
+    stores = live.stores("Москва")
+    codes = [s.get("name") or s.get("displayName") for s in stores.get("data") or []]
+    if len(codes) < 2:
+        pytest.skip("нужно два магазина для сравнения")
+    seen = []
+    for code in codes[:2]:
+        live.select_store(code)
+        data = live.search("вино:relevance:inStock:true")
+        results = data.get("results") or []
+        seen.append({p["code"]: (p.get("stock") or {}).get("stockLevel") for p in results})
+    assert seen[0] and seen[1], "пустая выдача — сравнивать нечего"
+
+
 def test_autocomplete(live):
     assert live.autocomplete("вис").get("products") is not None
 

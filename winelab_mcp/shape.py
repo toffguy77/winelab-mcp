@@ -82,10 +82,7 @@ def full_product(p: dict) -> dict:
             "attributes": _classifications(p),
             "image": _image(p),
             "max_qty": p.get("maxQty"),
-            "promotions": [
-                pr.get("description") or pr.get("title")
-                for pr in (p.get("potentialPromotions") or [])
-            ],
+            "promotions": _promotions(p),
             "sommelier": p.get("sommelier"),
             "consumption": p.get("consumption"),
             "rating_color": p.get("averageColorRating"),
@@ -97,11 +94,38 @@ def full_product(p: dict) -> dict:
     return {k: v for k, v in out.items() if v not in (None, [], {}, "")}
 
 
+def _promotions(p: dict) -> list[str]:
+    """Акции товара: без пустых, без дублей, без битой кодировки.
+
+    `potentialPromotions` приходит списком на сотню элементов, где почти всё —
+    `null`, а часть описаний бэкенд отдаёт мусором вида `???????? ?????`
+    (потерянная кириллица). В выдачу такое пускать незачем.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for pr in p.get("potentialPromotions") or []:
+        if not isinstance(pr, dict):
+            continue
+        text = (pr.get("description") or pr.get("title") or "").strip()
+        if not text or text in seen:
+            continue
+        letters = [ch for ch in text if ch.isalpha()]
+        if not letters or text.count("?") > len(text) / 4:
+            continue  # кодировка потеряна на стороне сайта
+        seen.add(text)
+        out.append(text)
+    return out
+
+
 def slim_store(s: dict) -> dict:
     address = s.get("address") or {}
-    line = ", ".join(
-        x for x in (s.get("town"), s.get("line1"), s.get("line2")) if x
-    ) or address.get("formattedAddress")
+    # /store-finder кладёт улицу в address.line1, /stores/<POS>/json — в корень
+    parts = [
+        s.get("town") or address.get("town"),
+        s.get("line1") or address.get("line1"),
+        s.get("line2") or address.get("line2"),
+    ]
+    line = ", ".join(x for x in parts if x) or address.get("formattedAddress")
     return {
         "code": s.get("name") or s.get("displayName"),
         "address": line,

@@ -266,6 +266,75 @@ class WinelabClient:
     def current_pos(self) -> dict:
         return self.get_json("/view/POSSelectorComponentController/json")
 
+    def current_pos_name(self) -> str | None:
+        try:
+            return self.current_pos().get("favouritePosName")
+        except WinelabError:
+            return None
+
+    def select_store(self, code: str) -> dict:
+        """Привязать сессию к конкретному магазину региона.
+
+        Штатной ручки у сайта нет: фронт зовёт `POST /store-finder/pos`, который
+        режется на периметре (405). Поэтому пробуем несколько способов подряд и
+        после каждого сверяемся с `/view/POSSelectorComponentController/json`.
+        Последний способ — выставить куку `currentPOS` руками: состояние магазина
+        сайт держит именно в ней.
+
+        Возвращает {"ok", "method", "attempts"}; сеть трогаем ровно до первой
+        сработавшей стратегии.
+        """
+        self._bootstrap()
+        code = (code or "").strip()
+        if not code:
+            raise ValueError("нужен код магазина, напр. 'M735'")
+
+        attempts: list[dict[str, Any]] = []
+        for name, apply in self._pos_strategies():
+            error: str | None = None
+            try:
+                apply(code)
+            except Exception as exc:  # noqa: BLE001 — стратегия неудачна, идём дальше
+                error = str(exc)[:200]
+            current = self.current_pos_name()
+            attempts.append({"method": name, "pos_after": current, "error": error})
+            if current == code:
+                self._persist()
+                return {"ok": True, "method": name, "attempts": attempts}
+
+        # ни один способ не прижился — откатываем куку, чтобы не врать о магазине
+        try:
+            self._http.cookies.delete("currentPOS", domain=self._domain, path="/")
+        except (KeyError, ValueError):
+            pass
+        return {"ok": False, "method": None, "attempts": attempts}
+
+    def _pos_strategies(self):
+        ajax = self._ajax_headers()
+
+        def get_pos_name(code: str) -> None:
+            self._http.get("/store-finder/pos-name", params={"posName": code}, headers=ajax)
+
+        def get_pos(code: str) -> None:
+            self._http.get("/store-finder/pos", params={"posName": code}, headers=ajax)
+
+        def post_pos(code: str) -> None:
+            self._post_with_csrf("/store-finder/pos", {"storeId": code})
+
+        def post_pickup(code: str) -> None:
+            self._post_with_csrf("/store-pickup/pos", {"posName": code})
+
+        def set_cookie(code: str) -> None:
+            self._http.cookies.set("currentPOS", code, domain=self._domain, path="/")
+
+        return (
+            ("store-finder/pos-name", get_pos_name),
+            ("store-finder/pos (GET)", get_pos),
+            ("store-finder/pos (POST)", post_pos),
+            ("store-pickup/pos (POST)", post_pickup),
+            ("cookie currentPOS", set_cookie),
+        )
+
     def stores(self, q: str | None = None, page: int = 0) -> dict:
         params: dict[str, Any] = {"page": page}
         if q:

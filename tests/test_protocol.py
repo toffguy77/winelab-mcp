@@ -21,6 +21,7 @@ EXPECTED_TOOLS = {
     "list_regions",
     "set_region",
     "current_store",
+    "set_store",
     "find_stores",
     "store_details",
     "cart_view",

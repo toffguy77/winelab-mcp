@@ -72,6 +72,17 @@ class FakeSite:
         self.calls: list[tuple[str, str]] = []
         self.last_body: str = ""
         self._sid_seq = 0
+        # Как на живом сайте: магазин сессии живёт в куке currentPOS, а ручки
+        # /store-finder/pos и /store-pickup/pos режутся на периметре (405).
+        self.default_pos = "M735"
+        self.pos_cookie_works = True
+
+    def _current_pos(self, request: httpx.Request) -> str:
+        if self.pos_cookie_works:
+            seen = re.search(r"currentPOS=([^;]+)", request.headers.get("cookie", ""))
+            if seen:
+                return seen.group(1)
+        return self.default_pos
 
     def _session_cookie(self, request: httpx.Request) -> str:
         """Как настоящий сервер: клиенту без куки выдаём новый JSESSIONID."""
@@ -165,13 +176,17 @@ class FakeSite:
             return httpx.Response(
                 200,
                 json={
-                    "favouritePosName": "M735",
+                    "favouritePosName": self._current_pos(request),
                     "shortRegion": "MOW",
                     "formattedAddress": "г. Москва, ...",
                     "posTimezone": 3,
                     "metroStations": [],
                 },
             )
+        if path == "/store-finder/pos-name":
+            return httpx.Response(200, text="Вы находитесь в М735")
+        if path in ("/store-finder/pos", "/store-pickup/pos"):
+            return httpx.Response(405, text="<html>method not allowed</html>")
         if path == "/store-finder":
             return httpx.Response(200, json={"total": 1, "pages": 1, "data": [STORE]})
         if path.startswith("/stores/"):
