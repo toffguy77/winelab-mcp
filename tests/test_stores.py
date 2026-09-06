@@ -98,6 +98,22 @@ def test_store_address_from_nested_field():
     assert slim_store(nested)["address"] == "г. Москва, ул. Адмирала Лазарева, д. 63, к. 1"
 
 
+def test_store_address_falls_back_to_formatted():
+    """Без улицы собирать нечего — иначе в ответе остаётся одинокий город.
+
+    Так отвечает /stores/<POS>/json: town есть, line1 нет, зато есть
+    formattedAddress с домом и индексом.
+    """
+    sparse = {
+        "name": "M735",
+        "address": {
+            "town": "г. Москва",
+            "formattedAddress": "г. Москва, ул. Адмирала Лазарева, д. 63, к. 1, 117041",
+        },
+    }
+    assert slim_store(sparse)["address"].endswith("д. 63, к. 1, 117041")
+
+
 def test_promotions_are_clean():
     raw = {
         "potentialPromotions": [
