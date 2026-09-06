@@ -1,0 +1,31 @@
+name: Идея
+description: Новый инструмент MCP или улучшение существующего
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую задачу это решает
+      description: Что вы хотите сделать и почему сейчас не получается.
+      placeholder: |
+        Хочу спросить «что у меня в избранном» — сейчас wishlist не поддержан.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Как это могло бы выглядеть
+      description: Название инструмента, параметры, что он возвращает.
+  - type: input
+    id: endpoint
+    attributes:
+      label: Известный эндпоинт сайта
+      description: Если знаете, каким путём это берётся — см. «Прочее» в API.md.
+      placeholder: /wishlist/product-codes
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Подтверждаю
+      options:
+        - label: Это не массовый парсинг, не обход антибота и не работа с чужими аккаунтами
+          required: true

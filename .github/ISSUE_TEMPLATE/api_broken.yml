@@ -1,0 +1,53 @@
+name: Сломался API winelab.ru
+description: Эндпоинт переехал, отдаёт HTML вместо JSON или начал блокировать
+labels: ["api-drift"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Сервер работает поверх недокументированного API сайта — тот меняется
+        без предупреждения. Такие отчёты особенно ценны: по ним чинится
+        `API.md` и канарейка в `tests/test_live.py`.
+
+        Быстрая проверка на своей машине:
+        `WINELAB_LIVE=1 pytest tests/test_live.py -v`
+  - type: textarea
+    id: symptom
+    attributes:
+      label: Что сломалось
+      description: Какой инструмент, что он вернул.
+      placeholder: 'cart_add отвечает {"ok": false, "error_kind": "blocked", ...}'
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: На что похоже
+      options:
+        - HTML вместо JSON (error_kind = blocked)
+        - Антибот Qrator
+        - HTTP 405 / 415 на запрос, который раньше работал
+        - Поменялся формат ответа (поля пропали или переименованы)
+        - Эндпоинт переехал на другой путь
+        - Другое
+    validations:
+      required: true
+  - type: textarea
+    id: canary
+    attributes:
+      label: Результат канарейки
+      description: Вывод `WINELAB_LIVE=1 pytest tests/test_live.py -v`, если запускали.
+      render: text
+  - type: textarea
+    id: endpoint
+    attributes:
+      label: Что видно в браузере
+      description: |
+        Если открывали DevTools — путь, метод, параметры и форма ответа.
+        **Уберите куки и заголовки авторизации.**
+      render: text
+  - type: input
+    id: region
+    attributes:
+      label: Регион
+      placeholder: RU-MOW

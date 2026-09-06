@@ -1,0 +1,65 @@
+name: Баг
+description: Что-то работает не так, как написано в README
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Если сломался не сервер, а сам сайт (эндпоинт переехал, отдаёт HTML
+        вместо JSON, вернулся `405`) — заведите «Сломался API winelab.ru».
+  - type: textarea
+    id: what
+    attributes:
+      label: Что происходит
+      description: Что вы сделали, что ожидали и что получили.
+      placeholder: |
+        Вызываю search_products("виски", sort="price_asc"), жду сортировку
+        по цене, получаю ...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Как воспроизвести
+      description: Шаги, запрос к модели или кусок кода.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Ответ инструмента или трассировка
+      description: |
+        Вставьте, что вернулось. **Уберите куки, телефон и коды из SMS.**
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Версия
+      description: Вывод `winelab-mcp --version`
+      placeholder: winelab-mcp 0.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: ОС
+      options: [Linux, macOS, Windows, другое]
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python
+      placeholder: "3.12.14"
+  - type: input
+    id: host
+    attributes:
+      label: MCP-хост
+      placeholder: Claude Code / Claude Desktop / Cursor / VS Code / свой клиент
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Проверено
+      options:
+        - label: В отчёте нет моих кук, телефона и кодов из SMS
+          required: true
