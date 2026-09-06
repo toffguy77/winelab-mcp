@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Уязвимость в безопасности
+    url: https://github.com/toffguy77/winelab-mcp/security/advisories/new
+    about: Не открывайте публичный issue — сообщите приватно.
+  - name: Вопрос «как этим пользоваться»
+    url: https://github.com/toffguy77/winelab-mcp/blob/main/README.md
+    about: Установка, подключение к хосту, вход в аккаунт и переменные окружения.
