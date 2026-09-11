@@ -107,6 +107,35 @@ class WinelabClient:
         for name, value in saved.items():
             self._http.cookies.set(name, value, domain=self._domain)
 
+    def _cookie_pairs(self) -> dict[str, str]:
+        """Куки как {имя: значение}.
+
+        `dict(client.cookies)` тут нельзя: httpx.Cookies — Mapping, и его
+        `__getitem__` бросает CookieConflict, если одно имя пришло сразу для
+        нескольких доменов или путей (сайт ставит `currentRegion` и на
+        `www.winelab.ru`, и на `.winelab.ru`). Идём по банке напрямую, отдавая
+        предпочтение куке нашего домена.
+        """
+        out: dict[str, str] = {}
+        preferred: dict[str, str] = {}
+        for cookie in self._http.cookies.jar:
+            name, value = cookie.name, cookie.value or ""
+            out[name] = value
+            if (cookie.domain or "").lstrip(".") == self._domain:
+                preferred[name] = value
+        out.update(preferred)
+        return out
+
+    def _drop_cookie(self, name: str) -> None:
+        """Убрать куку во всех доменах и путях, где она успела завестись."""
+        jar = self._http.cookies.jar
+        for cookie in list(jar):
+            if cookie.name == name:
+                try:
+                    jar.clear(cookie.domain, cookie.path, cookie.name)
+                except KeyError:
+                    pass
+
     def _persist(self) -> None:
         """Сохранить сессию, не затирая чужую авторизованную.
 
@@ -118,7 +147,7 @@ class WinelabClient:
         if self._store is None:
             return
         stored = self._store.load()
-        ours = dict(self._http.cookies)
+        ours = self._cookie_pairs()
         stored_sid = (stored.get("cookies") or {}).get("JSESSIONID")
         if stored.get("phone") and stored_sid != ours.get("JSESSIONID"):
             return
@@ -303,10 +332,7 @@ class WinelabClient:
                 return {"ok": True, "method": name, "attempts": attempts}
 
         # ни один способ не прижился — откатываем куку, чтобы не врать о магазине
-        try:
-            self._http.cookies.delete("currentPOS", domain=self._domain, path="/")
-        except (KeyError, ValueError):
-            pass
+        self._drop_cookie("currentPOS")
         return {"ok": False, "method": None, "attempts": attempts}
 
     def _pos_strategies(self):
@@ -325,6 +351,9 @@ class WinelabClient:
             self._post_with_csrf("/store-pickup/pos", {"posName": code})
 
         def set_cookie(code: str) -> None:
+            # сначала выметаем чужие currentPOS: иначе на разных доменах
+            # окажется две куки и сайт возьмёт не нашу
+            self._drop_cookie("currentPOS")
             self._http.cookies.set("currentPOS", code, domain=self._domain, path="/")
 
         return (
@@ -370,15 +399,22 @@ class WinelabClient:
         return r.text.strip().lower() == "true"
 
     def send_sms_code(self, phone: str) -> dict:
-        """Просит сайт отправить SMS с одноразовым кодом."""
+        """Просит сайт отправить SMS с одноразовым кодом.
+
+        GET — как во фронте; если ручку перевели на POST или прикрыли CSRF'ом,
+        пробуем ещё раз POST'ом, прежде чем сдаваться.
+        """
         number = normalize_phone(phone)
         r = self._request("GET", "/confirmation/sendByPhone", params={"number": number})
-        if r.status_code >= 400:
-            raise AuthError(
-                f"не удалось отправить код на {number} (HTTP {r.status_code}); "
-                "возможно, превышен лимит попыток — подождите пару минут"
-            )
-        return _maybe_json(r)
+        if r.status_code < 400:
+            return _maybe_json(r)
+        fallback = self._post_with_csrf("/confirmation/sendByPhone", {"number": number})
+        if fallback.status_code < 400:
+            return _maybe_json(fallback)
+        raise AuthError(
+            f"не удалось отправить код на {number}: "
+            f"GET — {_describe(r)}, POST — {_describe(fallback)}"
+        )
 
     def sms_code_info(self, phone: str) -> dict:
         """Сколько ждать до повторной отправки и сколько цифр в коде."""
@@ -407,7 +443,7 @@ class WinelabClient:
         self._request("POST", "/j_spring_security_check", data=payload, retries=0)
         ok = self.is_authenticated()
         if ok and self._store is not None:
-            self._store.save(dict(self._http.cookies), region=self.region, phone=number)
+            self._store.save(self._cookie_pairs(), region=self.region, phone=number)
         return ok
 
     def logout(self) -> None:
@@ -432,6 +468,17 @@ def _find_csrf(html: str) -> str | None:
         if m:
             return m.group(1)
     return None
+
+
+def _describe(r: httpx.Response) -> str:
+    """Короткий разбор неудачного ответа — чтобы не гадать по одному лишь коду."""
+    body = (r.text or "").strip()
+    if "qrator" in body[:1000].lower():
+        return f"HTTP {r.status_code}, антибот Qrator"
+    if r.status_code == 429:
+        return f"HTTP {r.status_code}, лимит попыток — подождите пару минут"
+    snippet = " ".join(body[:160].split())
+    return f"HTTP {r.status_code}" + (f", тело: {snippet!r}" if snippet else ", пустое тело")
 
 
 def _maybe_json(r: httpx.Response) -> dict:

@@ -119,13 +119,14 @@ def _promotions(p: dict) -> list[str]:
 
 def slim_store(s: dict) -> dict:
     address = s.get("address") or {}
-    # /store-finder кладёт улицу в address.line1, /stores/<POS>/json — в корень
-    parts = [
-        s.get("town") or address.get("town"),
-        s.get("line1") or address.get("line1"),
-        s.get("line2") or address.get("line2"),
-    ]
-    line = ", ".join(x for x in parts if x) or address.get("formattedAddress")
+    # Улицу один эндпоинт кладёт в корень объекта, другой — в address.line1,
+    # а третий не отдаёт вовсе, но заполняет formattedAddress. Собранный адрес
+    # берём только если в нём есть улица: иначе останется одинокий город.
+    town = s.get("town") or address.get("town")
+    street = s.get("line1") or address.get("line1")
+    extra = s.get("line2") or address.get("line2")
+    joined = ", ".join(x for x in (town, street, extra) if x)
+    line = joined if street else (address.get("formattedAddress") or joined or None)
     return {
         "code": s.get("name") or s.get("displayName"),
         "address": line,
