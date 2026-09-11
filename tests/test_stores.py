@@ -54,6 +54,41 @@ def test_set_store_survives_restart(client, store, site):
         reborn.close()
 
 
+def test_duplicate_cookie_does_not_break_session(client):
+    """Живой сайт ставит currentRegion и на www.winelab.ru, и на .winelab.ru.
+
+    `dict(httpx.Cookies)` на такой банке бросает CookieConflict — из-за этого
+    падал любой вызов, доходящий до сохранения сессии.
+    """
+    client._http.cookies.set("currentRegion", "RU-MOW", domain="www.winelab.ru")
+    client._http.cookies.set("currentRegion", "RU-SPE", domain=".winelab.ru")
+    pairs = client._cookie_pairs()
+    assert pairs["currentRegion"] == "RU-MOW"  # выигрывает кука нашего домена
+    assert client.select_store("M487")["ok"] is True
+
+
+def test_select_store_replaces_stale_cookie(client):
+    client._http.cookies.set("currentPOS", "M001", domain=".winelab.ru")
+    assert client.select_store("M487")["ok"] is True
+    assert [c.value for c in client._http.cookies.jar if c.name == "currentPOS"] == ["M487"]
+
+
+def test_send_sms_code_falls_back_to_post(client, site):
+    site.sms_get_status = 403
+    info = client.send_sms_code("9991234567")
+    assert info["codeLength"] == 4
+    assert ("POST", "/confirmation/sendByPhone") in site.calls
+
+
+def test_send_sms_code_reports_both_attempts(client, site):
+    site.sms_get_status = 403
+    site.sms_post_status = 403
+    with pytest.raises(Exception) as exc:
+        client.send_sms_code("9991234567")
+    text = str(exc.value)
+    assert "GET — HTTP 403" in text and "POST — HTTP 403" in text
+
+
 def test_store_address_from_nested_field():
     """/store-finder кладёт улицу в address.line1, а не в корень объекта."""
     nested = {
@@ -61,6 +96,22 @@ def test_store_address_from_nested_field():
         "address": {"town": "г. Москва", "line1": "ул. Адмирала Лазарева, д. 63, к. 1"},
     }
     assert slim_store(nested)["address"] == "г. Москва, ул. Адмирала Лазарева, д. 63, к. 1"
+
+
+def test_store_address_falls_back_to_formatted():
+    """Без улицы собирать нечего — иначе в ответе остаётся одинокий город.
+
+    Так отвечает /stores/<POS>/json: town есть, line1 нет, зато есть
+    formattedAddress с домом и индексом.
+    """
+    sparse = {
+        "name": "M735",
+        "address": {
+            "town": "г. Москва",
+            "formattedAddress": "г. Москва, ул. Адмирала Лазарева, д. 63, к. 1, 117041",
+        },
+    }
+    assert slim_store(sparse)["address"].endswith("д. 63, к. 1, 117041")
 
 
 def test_promotions_are_clean():
