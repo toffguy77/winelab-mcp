@@ -76,6 +76,9 @@ class FakeSite:
         # /store-finder/pos и /store-pickup/pos режутся на периметре (405).
         self.default_pos = "M735"
         self.pos_cookie_works = True
+        # /confirmation/sendByPhone: чем сайт отвечает на GET и на POST
+        self.sms_get_status = 200
+        self.sms_post_status = 200
 
     def _current_pos(self, request: httpx.Request) -> str:
         if self.pos_cookie_works:
@@ -120,9 +123,13 @@ class FakeSite:
             registered = f"mobileNumber={PHONE}" in body
             return httpx.Response(200, text="true" if registered else "false")
         if path == "/confirmation/sendByPhone":
-            number = params.get("number", "")
+            status = self.sms_post_status if request.method == "POST" else self.sms_get_status
+            number = params.get("number") or re.search(r"number=(\d+)", body)
+            number = number if isinstance(number, str) else (number.group(1) if number else "")
             if number != PHONE:
                 return httpx.Response(400, text="")
+            if status >= 400:
+                return httpx.Response(status, text="")
             self.sms_sent.append(number)
             return httpx.Response(200, json={"codeLength": 4, "timeout": 60})
         if path == "/confirmation/getByPhone":
