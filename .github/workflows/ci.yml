@@ -23,7 +23,7 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: pyproject.toml
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
       - name: Install
@@ -40,6 +40,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv build
+      - name: Установка колеса в чистое окружение
+        run: |
+          uv venv /tmp/fresh
+          uv pip install --python /tmp/fresh dist/*.whl
+          /tmp/fresh/bin/winelab-mcp --version
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  live:
+    name: Канарейка API winelab.ru
+    runs-on: ubuntu-latest
+    # Сайт чужой и может быть недоступен из CI — падение здесь информационное.
+    continue-on-error: true
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-python@v7
         with:
